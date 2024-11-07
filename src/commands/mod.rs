@@ -4,6 +4,8 @@ mod test;
 mod join;
 mod leave;
 mod queue;
+mod info;
+mod jump;
 
 use std::sync::Arc;
 use serenity::{all::{Command, CommandInteraction, Context, GuildId, Http}, Error};
@@ -41,7 +43,9 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
             test::register(),
             join::register(),
             leave::register(),
-            queue::register()
+            queue::register(),
+            info::register(),
+            jump::register()
         ])
         .await
 }
@@ -54,6 +58,8 @@ pub async fn handle_commands(ctx: Context, interaction: &CommandInteraction) {
         "join" => join::handle(ctx, interaction).await,
         "leave" => leave::handle(ctx, interaction).await,
         "queue" => queue::handle(ctx, interaction).await,
+        "info" => info::handle(ctx, interaction).await,
+        "jump" => jump::handle(ctx, interaction).await,
         &_ => {},
     };
 }
