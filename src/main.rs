@@ -17,6 +17,9 @@ async fn main() {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "info")
     }
+    // tracing_subscriber::fmt()
+    //     .compact()
+    //     .finish();
     tracing_subscriber::fmt::init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");

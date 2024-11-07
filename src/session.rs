@@ -1,26 +1,41 @@
-use std::{io::{Read, Seek}, sync::{Arc, RwLock}};
+use std::{collections::VecDeque, io::{Read, Seek}, sync::Arc};
 
-use libopenmpt_sys::{openmpt_module, openmpt_module_read_interleaved_float_stereo};
+use libopenmpt_sys::{openmpt_module, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo};
 use serenity::all::{ChannelId, Context, CreateMessage};
 use symphonia::core::io::MediaSource;
-use tokio::{spawn, sync::mpsc::Sender};
+use tokio::{spawn, sync::{mpsc::Sender, RwLock}};
+
+use crate::misc::escape_markdown;
 
 // Raw FFI in Rust kinda sucks
 // To ensure safety, please use the module in ONLY one session!!!
 unsafe impl Send for OpenMptModuleSafe {}
 unsafe impl Sync for OpenMptModuleSafe {}
 pub struct OpenMptModuleSafe(pub *mut openmpt_module);
+impl Drop for OpenMptModuleSafe {
+    fn drop(&mut self) {
+        unsafe { openmpt_module_destroy(self.0); }
+    }
+}
+
+pub struct WrappedModule {
+    // pub filename: String,
+    pub filehash: String,
+    pub module: OpenMptModuleSafe
+}
 
 pub enum VoiceSessionNotificationMessage {
-    EndOfSong,
+    EndOfQueue,
+    PlayingNextInQueue(String),
     Leave,
 }
 
 pub struct VoiceSessionData {
-    pub(crate) module: Option<OpenMptModuleSafe>,
-    pub(crate) context: Context,
-    pub(crate) text_channel_id: ChannelId,
-    pub(crate) async_handle: Sender<VoiceSessionNotificationMessage>,
+    pub(crate) current_module: Option<WrappedModule>,
+    // pub(crate) context: Context,
+    // pub(crate) text_channel_id: ChannelId,
+    pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
+    pub(crate) module_queue: VecDeque<WrappedModule>
 }
 
 // impl VoiceSessionData {
@@ -47,11 +62,19 @@ impl VoiceSession {
             loop {
                 if let Some(message) = rx.recv().await {
                     match message {
-                        VoiceSessionNotificationMessage::EndOfSong => {
-                            let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content("End of song reached, stopped playback"))
+                        VoiceSessionNotificationMessage::EndOfQueue => {
+                            let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content("End of queue reached, no more songs to play"))
                                 .await;
                             },
                         VoiceSessionNotificationMessage::Leave => break,
+                        VoiceSessionNotificationMessage::PlayingNextInQueue(title) => {
+                            let mut escaped_title = escape_markdown(&title);
+                            if escaped_title.is_empty() {
+                                escaped_title = "[No title]".to_string();
+                            }
+                            let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content("Now playing: **".to_string()+&escaped_title+"**"))
+                                .await;
+                        },
                     };
                 }
             }
@@ -59,10 +82,11 @@ impl VoiceSession {
 
         Self {
             data: Arc::new(RwLock::new(VoiceSessionData {
-                module: None,
-                context: ctx.clone(),
-                text_channel_id,
-                async_handle: tx
+                current_module: None,
+                // context: ctx.clone(),
+                // text_channel_id,
+                notification_handle: tx,
+                module_queue: VecDeque::with_capacity(16)
             })),
         }
     }
@@ -72,13 +96,26 @@ impl Read for VoiceSession {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let (_r_begin, floats, _r_end) = unsafe { buf.align_to_mut::<f32>() };
         floats.fill(0.0); // Fill with silence
-        let mut data_l = self.data.write().unwrap();
-        if let Some(module) = &data_l.module {
+        let mut data_l = self.data.blocking_write();
+        if let Some(module_wrapped) = &data_l.current_module {
             unsafe {
-                let frames_read = openmpt_module_read_interleaved_float_stereo(module.0, 48000, floats.len()/2, floats.as_mut_ptr());
+                let frames_read = openmpt_module_read_interleaved_float_stereo(module_wrapped.module.0, 48000, floats.len()/2, floats.as_mut_ptr());
                 if frames_read < floats.len()/2 {
-                    data_l.module = None;
-                    data_l.async_handle.blocking_send(VoiceSessionNotificationMessage::EndOfSong).unwrap();
+                    if data_l.module_queue.len() == 0 {
+                        data_l.current_module = None;
+                        data_l.notification_handle.blocking_send(VoiceSessionNotificationMessage::EndOfQueue).unwrap();
+                    } else {
+                        let Some(queued_module) = data_l.module_queue.pop_front() else { unreachable!() };
+                        data_l.current_module = Some(queued_module);
+                        let Some(module) = &data_l.current_module else { unreachable!() };
+
+                        let key = std::ffi::CString::new("title").unwrap();
+                        let title_raw = openmpt_module_get_metadata(module.module.0, key.as_ptr());
+                        let module_title = std::ffi::CStr::from_ptr(title_raw)
+                            .to_str().unwrap();
+
+                        data_l.notification_handle.blocking_send(VoiceSessionNotificationMessage::PlayingNextInQueue(module_title.to_string())).unwrap();
+                    }
                 }
             }
         }

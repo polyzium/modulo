@@ -1,4 +1,5 @@
-use std::{collections::HashMap, sync::{Arc, RwLock}};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
 use serenity::{all::GuildId, prelude::TypeMapKey};
 

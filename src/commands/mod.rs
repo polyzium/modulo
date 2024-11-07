@@ -3,6 +3,7 @@ mod play;
 mod test;
 mod join;
 mod leave;
+mod queue;
 
 use std::sync::Arc;
 use serenity::{all::{Command, CommandInteraction, Context, GuildId, Http}, Error};
@@ -17,8 +18,14 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
     //     Command::delete_global_command(&http, cmd.id).await.unwrap();
     // }
 
-    // let guild_id = GuildId::new(1302224187024216175);
-    let guild_id = GuildId::new(683394719770083424);
+    /*
+        To anybody who comes across this line:
+        this is purely for testing purposes as global commands
+        take up to an hour to update, and thus are not instantaneous.
+        Instead we make guild commands which update instantaneously.
+    */
+    let guild_id = GuildId::new(1302224187024216175);
+    // let guild_id = GuildId::new(683394719770083424);
 
     // // let commands = guild_id
     // let command_ids = guild_id.get_commands(&http).await.unwrap()
@@ -34,6 +41,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
             test::register(),
             join::register(),
             leave::register(),
+            queue::register()
         ])
         .await
 }
@@ -45,6 +53,7 @@ pub async fn handle_commands(ctx: Context, interaction: &CommandInteraction) {
         "test" => test::handle(ctx, interaction).await,
         "join" => join::handle(ctx, interaction).await,
         "leave" => leave::handle(ctx, interaction).await,
+        "queue" => queue::handle(ctx, interaction).await,
         &_ => {},
     };
 }

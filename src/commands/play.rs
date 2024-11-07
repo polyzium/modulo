@@ -1,13 +1,13 @@
-use std::ffi::c_void;
+use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut};
 
-use libopenmpt_sys::openmpt_module_create_from_memory2;
+use libopenmpt_sys::{openmpt_module_create_from_memory2, openmpt_module_get_metadata};
 use serenity::all::{CommandInteraction, Context, CreateCommandOption, CreateInteractionResponseFollowup, ResolvedValue};
 use serenity::builder::CreateCommand;
 
 use crate::botdata::BotDataKey;
-use crate::misc::{openmpt_logger, respond_command};
-use crate::session::OpenMptModuleSafe;
+use crate::misc::{escape_markdown, followup_command, openmpt_logger, respond_command};
+use crate::session::{OpenMptModuleSafe, WrappedModule};
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let data_lock = ctx.data.read().await;
@@ -23,20 +23,27 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         .unwrap().clone()
         .value;
     let ResolvedValue::String(url) = url_u else { unreachable!() };
-    // Defer an interaction because we're about to download the file.
+    // Defer the interaction because we're about to download the file
     interaction.defer(&ctx).await.unwrap();
-    let response = data_lock.get::<BotDataKey>().unwrap()
-        .downloader_client.get(url).send().await.unwrap();
+    let response_u = data_lock.get::<BotDataKey>().unwrap()
+        .downloader_client.get(url).send().await;
+    if let Err(err) = &response_u {
+        followup_command(&ctx, interaction, &("HTTP request error: ".to_owned()+&err.to_string())).await;
+        return;
+    }
+    let response = response_u.unwrap();
     if let Err(err) = response.error_for_status_ref() {
-        respond_command(&ctx, interaction, &("Error: ".to_owned()+&err.to_string())).await;
+        followup_command(&ctx, interaction, &("Unable to fetch the module file: ".to_owned()+&err.to_string())).await;
+        return;
     }
 
     let module_bytes = response.bytes()
         .await.unwrap();
+    let module_file_hash = sha256::digest(&*module_bytes);
 
     let session_data = session_data_u.unwrap().clone();
 
-    let raw_openmpt_module = unsafe {openmpt_module_create_from_memory2(
+    let module = OpenMptModuleSafe(unsafe {openmpt_module_create_from_memory2(
         module_bytes.as_ptr() as *const c_void,
         module_bytes.len(),
         Some(openmpt_logger),
@@ -46,8 +53,8 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         null_mut(),
         null_mut(),
         null(),
-    )};
-    if raw_openmpt_module.is_null() {
+    )});
+    if module.0.is_null() {
         let followup = CreateInteractionResponseFollowup::new()
         .content("Failed to initialize libopenmpt module");
         interaction.create_followup(&ctx, followup).await.unwrap();
@@ -55,15 +62,60 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         return;
     }
 
-    session_data.write().unwrap()
-        .module = Some(OpenMptModuleSafe(raw_openmpt_module));
+    let wrapped_module = WrappedModule {
+        filehash: module_file_hash,
+        module,
+    };
 
-    let followup = CreateInteractionResponseFollowup::new()
-        .content("Playing song");
-    interaction.create_followup(&ctx, followup).await.unwrap();
+    let mut session_data_lock = session_data.write().await;
+    let key = CString::new("title").unwrap();
+
+    let loaded_module_title = unsafe {CStr::from_ptr(openmpt_module_get_metadata(wrapped_module.module.0, key.as_ptr()))}
+        .to_str().unwrap();
+    if let Some(playing_module) = &session_data_lock.current_module {
+        if wrapped_module.filehash == playing_module.filehash {
+            let followup = CreateInteractionResponseFollowup::new()
+                .content("This module is already being played");
+            drop(session_data_lock);
+            interaction.create_followup(&ctx, followup).await.unwrap();
+            return;
+        }
+    }
+
+    for queued_module in session_data_lock.module_queue.iter() {
+        if wrapped_module.filehash == queued_module.filehash {
+            let followup = CreateInteractionResponseFollowup::new()
+                .content("This module already exists in the queue");
+            drop(session_data_lock);
+            interaction.create_followup(&ctx, followup).await.unwrap();
+            return;
+        }
+    }
+
+    // Escape symbols that might conflict with Discord's Markdown syntax
+    let mut loaded_module_title_escaped = escape_markdown(loaded_module_title);
+    if loaded_module_title_escaped.is_empty() {
+        loaded_module_title_escaped = "[No title]".to_string()
+    }
+
+    let followup: CreateInteractionResponseFollowup;
+    if session_data_lock.module_queue.is_empty() && session_data_lock.current_module.is_none() {
+        session_data_lock.current_module = Some(wrapped_module);
+        followup = CreateInteractionResponseFollowup::new()
+            .content(&("Now playing: **".to_string()+&loaded_module_title_escaped+"**"));
+    } else {
+        session_data_lock.module_queue.push_back(wrapped_module);
+        followup = CreateInteractionResponseFollowup::new()
+            .content("Added **".to_string() + &loaded_module_title_escaped + "** to the queue");
+    }
+    drop(session_data_lock);
+
+    interaction.create_followup(&ctx, followup)
+        .await.unwrap();
 }
 
 pub fn register() -> CreateCommand {
     CreateCommand::new("play").description("Play a module")
         .add_option(CreateCommandOption::new(serenity::all::CommandOptionType::String, "url", "Tracker module file URL").required(true))
+        .add_option(CreateCommandOption::new(serenity::all::CommandOptionType::Boolean, "override", "Skip the currently playing song, if you have permissions"))
 }

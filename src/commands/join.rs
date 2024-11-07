@@ -1,12 +1,10 @@
-use std::sync::{Arc, RwLock};
-
 use serenity::all::{ChannelId, ChannelType, CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage};
 use serenity::builder::CreateCommand;
 use songbird::input::RawAdapter;
 
 use crate::botdata::BotDataKey;
 use crate::misc::respond_command;
-use crate::session::{VoiceSession, VoiceSessionData};
+use crate::session::VoiceSession;
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let (guild_id, voice_channel_id) = {
