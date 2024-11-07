@@ -1,11 +1,13 @@
 use std::{collections::VecDeque, io::{Read, Seek}, sync::Arc};
 
 use libopenmpt_sys::{openmpt_module, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo};
-use serenity::all::{ChannelId, Context, CreateMessage};
+use serenity::{all::{ChannelId, Context, CreateMessage, GuildId}, prelude::TypeMap};
+use songbird::input::RawAdapter;
 use symphonia::core::io::MediaSource;
 use tokio::{spawn, sync::{mpsc::Sender, RwLock}};
+use anyhow::Result;
 
-use crate::misc::escape_markdown;
+use crate::{botdata::BotDataKey, misc::escape_markdown};
 
 // Raw FFI in Rust kinda sucks
 // To ensure safety, please use the module in ONLY one session!!!
@@ -139,5 +141,42 @@ impl MediaSource for VoiceSession {
 
     fn byte_len(&self) -> Option<u64> {
         None
+    }
+}
+
+pub async fn initiate_session(ctx: &Context, guild_id: GuildId, voice_channel_id: ChannelId, text_channel_id: ChannelId) -> Result<Arc<RwLock<VoiceSessionData>>> {
+    {
+        let mut lock = ctx.data.write().await;
+        let botdata = lock.get_mut::<crate::BotDataKey>().unwrap();
+        if let Some(_) = botdata.sessions.get(&guild_id) {
+            return Err(anyhow::anyhow!("The bot is already in the voice channel or a session already exists for this guild id"));
+        }
+    }
+
+    let manager = songbird::get(&ctx)
+    .await
+    .expect("Songbird Voice client placed in at initialisation.")
+    .clone();
+
+    match manager.join(guild_id, voice_channel_id).await {
+        Ok(handler_lock) => {
+            let mut handler = handler_lock.lock().await;
+
+            let session = VoiceSession::new(&ctx, text_channel_id);
+            let voicedata = session.data.clone();
+            let voicedata2 = voicedata.clone();
+
+            let mut lock = ctx.data.write().await;
+            let botdata = lock.get_mut::<BotDataKey>().unwrap();
+            botdata.sessions.insert(guild_id, voicedata);
+
+            let pcm = RawAdapter::new(session, 48000, 2);
+            let _ = handler.play_input(pcm.into());
+
+            return Ok(voicedata2);
+        }
+        Err(err) => {
+            return Err(anyhow::Error::new(err));
+        },
     }
 }

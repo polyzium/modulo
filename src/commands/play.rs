@@ -2,29 +2,83 @@ use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut};
 
 use libopenmpt_sys::{openmpt_module_create_from_memory2, openmpt_module_get_metadata};
-use serenity::all::{CommandInteraction, Context, CreateCommandOption, CreateInteractionResponseFollowup, ResolvedValue};
+use serenity::all::{ChannelId, ChannelType, CommandInteraction, Context, CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, ResolvedValue};
 use serenity::builder::CreateCommand;
 
 use crate::botdata::BotDataKey;
 use crate::misc::{escape_markdown, followup_command, openmpt_logger, respond_command};
-use crate::session::{OpenMptModuleSafe, WrappedModule};
+use crate::session::{initiate_session, OpenMptModuleSafe, WrappedModule};
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let data_lock = ctx.data.read().await;
     let session_data_u = data_lock.get::<BotDataKey>().unwrap()
         .sessions.get(&interaction.guild_id.unwrap());
+    let mut deferred = false;
     if session_data_u.is_none() {
-        respond_command(&ctx, interaction, "The bot must be in a voice channel").await;
-        return;
+        // respond_command(&ctx, interaction, "The bot must be in a voice channel").await;
+        // return;
+
+        let (guild_id, voice_channel_id) = {
+            let guild_id = interaction.guild_id.unwrap();
+            let voice_channel_id: Option<ChannelId> = {
+                let channels = guild_id
+                .to_partial_guild(&ctx.http).await.unwrap()
+                .channels(&ctx.http).await.unwrap();
+
+                let channel = channels.values()
+                    .find(|channel| {
+                        if channel.kind != ChannelType::Voice { return false };
+                        let members = channel.members(&ctx).unwrap();
+                        let member = members
+                            .iter()
+                            .find(|member| member.user.id == interaction.user.id);
+                        member.is_some()
+                    });
+                match channel {
+                    Some(channel) => Some(channel.id),
+                    None => None,
+                }
+            };
+
+            (guild_id, voice_channel_id)
+        };
+
+        let connect_to = match voice_channel_id {
+            Some(channel) => channel,
+            None => {
+                let response = CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                    .content("Join a voice channel first".to_string())
+                );
+                interaction.create_response(ctx.http, response).await.unwrap();
+                return;
+            },
+        };
+
+        interaction.defer(&ctx).await.unwrap();
+        deferred = true;
+
+        drop(data_lock);
+        if let Err(err) = initiate_session(&ctx, guild_id, connect_to, interaction.channel_id).await {
+            followup_command(&ctx, interaction, &err.to_string()).await;
+            return;
+        }
     }
+
+    let data_lock = ctx.data.read().await;
+    let session_data_u = data_lock.get::<BotDataKey>().unwrap()
+        .sessions.get(&interaction.guild_id.unwrap());
 
     let url_u = interaction.data.options().iter()
         .find(|option| option.name == "url")
         .unwrap().clone()
         .value;
     let ResolvedValue::String(url) = url_u else { unreachable!() };
+
     // Defer the interaction because we're about to download the file
-    interaction.defer(&ctx).await.unwrap();
+    if !deferred {
+        interaction.defer(&ctx).await.unwrap();
+    }
     let response_u = data_lock.get::<BotDataKey>().unwrap()
         .downloader_client.get(url).send().await;
     if let Err(err) = &response_u {
