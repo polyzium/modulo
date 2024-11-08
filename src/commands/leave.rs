@@ -26,7 +26,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let guild_id = interaction.guild_id.unwrap();
 
     let session = botdata.sessions.get(&guild_id).unwrap();
-    let session_lock = session.write().await;
+    let session_lock = session.data.write().await;
 
     let handle = session_lock.notification_handle.clone();
     handle.send(crate::session::VoiceSessionNotificationMessage::Leave).await.unwrap();

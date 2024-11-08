@@ -1,4 +1,4 @@
-use serenity::all::{ChannelId, ChannelType, CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage};
+use serenity::all::{CacheHttp, ChannelId, ChannelType, CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage};
 use serenity::builder::CreateCommand;
 use songbird::input::RawAdapter;
 
@@ -9,23 +9,13 @@ use crate::session::{initiate_session, VoiceSession};
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let (guild_id, voice_channel_id) = {
         let guild_id = interaction.guild_id.unwrap();
+        let guild = ctx.cache.guild(guild_id).unwrap();
+        let voicestate_u = guild.voice_states.get(&interaction.member.clone().unwrap().user.id);
         let voice_channel_id: Option<ChannelId> = {
-            let channels = guild_id
-            .to_partial_guild(&ctx.http).await.unwrap()
-            .channels(&ctx.http).await.unwrap();
-
-            let channel = channels.values()
-                .find(|channel| {
-                    if channel.kind != ChannelType::Voice { return false };
-                    let members = channel.members(&ctx).unwrap();
-                    let member = members
-                        .iter()
-                        .find(|member| member.user.id == interaction.user.id);
-                    member.is_some()
-                });
-            match channel {
-                Some(channel) => Some(channel.id),
-                None => None,
+            if let Some(voicestate) = voicestate_u {
+                voicestate.channel_id
+            } else {
+                None
             }
         };
 

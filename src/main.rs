@@ -3,6 +3,7 @@ mod commands;
 mod botdata;
 mod session;
 mod misc;
+mod vote;
 
 use std::env;
 use botdata::{BotData, BotDataKey};

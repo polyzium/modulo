@@ -7,15 +7,15 @@ use crate::{botdata::BotDataKey, misc::{escape_markdown, respond_command}};
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let data_lock = ctx.data.read().await;
-    let session_data_u = data_lock.get::<BotDataKey>().unwrap()
+    let session_handle_u = data_lock.get::<BotDataKey>().unwrap()
         .sessions.get(&interaction.guild_id.unwrap());
-    if session_data_u.is_none() {
+    if session_handle_u.is_none() {
         respond_command(&ctx, interaction, "The bot must be in a voice channel").await;
         return;
     }
 
-    let session_data = session_data_u.unwrap().clone();
-    let session_data_lock = session_data.read().await;
+    let session = session_handle_u.unwrap().clone();
+    let session_data_lock = session.data.read().await;
     let queue = &session_data_lock
         .module_queue;
     let key = CString::new("title").unwrap();
