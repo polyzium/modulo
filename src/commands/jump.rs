@@ -7,9 +7,9 @@ use crate::misc::respond_command;
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let data_lock = ctx.data.read().await;
-    let session_data_u = data_lock.get::<BotDataKey>().unwrap()
+    let session_u = data_lock.get::<BotDataKey>().unwrap()
         .sessions.get(&interaction.guild_id.unwrap());
-    if session_data_u.is_none() {
+    if session_u.is_none() {
         respond_command(&ctx, interaction, "The bot must be in a voice channel").await;
         return;
     }
@@ -26,7 +26,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 
 pub async fn handle_order(ctx: Context, interaction: &CommandInteraction, options: &Vec<ResolvedOption<'_>>) {
     let data_lock = ctx.data.read().await;
-    let session_data_u = data_lock.get::<BotDataKey>().unwrap()
+    let session_u = data_lock.get::<BotDataKey>().unwrap()
         .sessions.get(&interaction.guild_id.unwrap());
 
     let order_u = options.iter()
@@ -35,8 +35,8 @@ pub async fn handle_order(ctx: Context, interaction: &CommandInteraction, option
         .value;
     let ResolvedValue::Integer(order) = order_u else { unreachable!() };
 
-    let session_data = session_data_u.unwrap().clone();
-    let session_lock = session_data.write().await;
+    let session = session_u.unwrap().clone();
+    let session_lock = session.data.write().await;
 
     if let Some(current_module) = &session_lock.current_module {
         unsafe { openmpt_module_set_position_order_row(current_module.module.0, order as i32, 0) };
@@ -58,7 +58,7 @@ pub async fn handle_order(ctx: Context, interaction: &CommandInteraction, option
 
 pub async fn handle_subsong(ctx: Context, interaction: &CommandInteraction, options: &Vec<ResolvedOption<'_>>) {
     let data_lock = ctx.data.read().await;
-    let session_data_u = data_lock.get::<BotDataKey>().unwrap()
+    let session_u = data_lock.get::<BotDataKey>().unwrap()
         .sessions.get(&interaction.guild_id.unwrap());
 
     let subsong_u = options.iter()
@@ -67,8 +67,8 @@ pub async fn handle_subsong(ctx: Context, interaction: &CommandInteraction, opti
         .value;
     let ResolvedValue::Integer(subsong) = subsong_u else { unreachable!() };
 
-    let session_data = session_data_u.unwrap().clone();
-    let session_lock = session_data.write().await;
+    let session = session_u.unwrap().clone();
+    let session_lock = session.data.write().await;
 
     if let Some(current_module) = &session_lock.current_module {
         let subsong_status = unsafe { openmpt_module_select_subsong(current_module.module.0, subsong as i32) };

@@ -3,12 +3,12 @@ use tokio::sync::RwLock;
 
 use serenity::{all::GuildId, prelude::TypeMapKey};
 
-use crate::session::VoiceSessionData;
+use crate::session::{VoiceSessionData, VoiceSessionHandle};
 
 pub struct BotDataKey;
 
 pub struct BotData {
-    pub(crate) sessions: HashMap<GuildId, Arc<RwLock<VoiceSessionData>>>,
+    pub(crate) sessions: HashMap<GuildId, VoiceSessionHandle>,
     pub(crate) downloader_client: reqwest::Client
 }
 

@@ -1,3 +1,4 @@
+use serenity::all::ComponentInteractionDataKind;
 use serenity::all::Interaction;
 use serenity::all::Ready;
 use serenity::prelude::*;
@@ -5,6 +6,7 @@ use serenity::async_trait;
 use serenity::model::channel::Message;
 
 use crate::commands;
+use crate::vote;
 
 pub struct Handler;
 
@@ -26,8 +28,18 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::Command(ref command) = interaction {
-            commands::handle_commands(ctx, command).await;
+        match interaction {
+            Interaction::Command(ref command) => commands::handle_commands(ctx, command).await,
+            Interaction::Component(ref component_interaction) => {
+                if let ComponentInteractionDataKind::Button = component_interaction.data.kind {
+                    if component_interaction.data.custom_id.starts_with("vote") {
+                        vote::handle_voting(ctx, component_interaction).await;
+                    }
+                }
+            },
+            _ => (),
         }
     }
+
+    // async fn voice_state_update
 }
