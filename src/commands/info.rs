@@ -102,18 +102,9 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             }
         }
 
-        // Song message
-        let mut song_message = "## Song message\n```".to_string();
-        let message_key = CString::new("message").unwrap();
-        let msg: String = unsafe {CStr::from_ptr(openmpt_module_get_metadata(current_module.module.0, message_key.as_ptr()))}
-            .to_str().unwrap()
-            .to_string();
-        song_message.push_str(&(msg.clone()+&"```"));
-
         drop(session_lock);
         let response = format!("# {title}\n{details}\n{playback}\n{metadata}");
         respond_command(&ctx, interaction, &response).await;
-        followup_command(&ctx, interaction, &song_message).await;
         return;
     } else {
         drop(session_lock);
