@@ -28,6 +28,9 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             .to_string();
         title = escape_markdown(&title);
         let mut paused = String::new();
+        if title.is_empty() {
+            title = "[No title]".to_string()
+        }
         if session_data_lock.paused {
             paused = " (paused)".to_string();
         }
