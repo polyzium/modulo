@@ -1,6 +1,4 @@
-mod ping;
 mod play;
-mod test;
 mod join;
 mod leave;
 mod queue;
@@ -40,9 +38,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
     // }
     guild_id
         .set_commands(&http, vec![
-            ping::register(),
             play::register(),
-            test::register(),
             join::register(),
             leave::register(),
             queue::register(),
@@ -56,9 +52,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
 
 pub async fn handle_commands(ctx: Context, interaction: &CommandInteraction) {
     match interaction.data.name.as_str() {
-        "ping" => ping::handle(ctx, interaction).await,
         "play" => play::handle(ctx, interaction).await,
-        "test" => test::handle(ctx, interaction).await,
         "join" => join::handle(ctx, interaction).await,
         "leave" => leave::handle(ctx, interaction).await,
         "queue" => queue::handle(ctx, interaction).await,
