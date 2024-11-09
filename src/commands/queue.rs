@@ -27,7 +27,11 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             .to_str().unwrap()
             .to_string();
         title = escape_markdown(&title);
-        current_content = "Currently playing: **".to_string()+&title+"**\n";
+        let mut paused = String::new();
+        if session_data_lock.paused {
+            paused = " (paused)".to_string();
+        }
+        current_content = "Currently playing: **".to_string()+&title+"**" + &paused + "\n";
     }
 
     if queue.is_empty() {

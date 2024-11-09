@@ -34,29 +34,18 @@ pub enum VoiceSessionNotificationMessage {
 
 pub enum VoiceSessionControlMessage {
     PlayNextInQueue,
-    Pause,
-    Resume,
-    Stop
+    // TODO
 }
 
 pub struct VoiceSessionData {
     pub(crate) current_module: Option<WrappedModule>,
+    pub paused: bool,
     // pub(crate) context: Context,
     // pub(crate) text_channel_id: ChannelId,
     pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
     pub(crate) module_queue: VecDeque<WrappedModule>,
     pub current_vote: Option<crate::vote::Vote>
 }
-
-// impl VoiceSessionData {
-//     pub fn shutdown(&self) {
-//         self.async_handle.blocking_send(VoiceSessionNotificationMessage::Leave).unwrap();
-//     }
-
-//     // pub async fn shutdown_async(&self) {
-//     //     self.async_handle.send(VoiceSessionNotificationMessage::Leave).await.unwrap();
-//     // }
-// }
 
 #[derive(Clone)]
 pub struct VoiceSessionHandle {
@@ -102,6 +91,7 @@ impl VoiceSession {
         let this = Self {
             data: Arc::new(RwLock::new(VoiceSessionData {
                 current_module: None,
+                paused: false,
                 // context: ctx.clone(),
                 // text_channel_id,
                 notification_handle: tx,
@@ -141,10 +131,12 @@ impl Read for VoiceSession {
         floats.fill(0.0); // Fill with silence
         let data_l = self.data.blocking_write();
         if let Some(module_wrapped) = &data_l.current_module {
-            unsafe {
-                let frames_read = openmpt_module_read_interleaved_float_stereo(module_wrapped.module.0, 48000, floats.len()/2, floats.as_mut_ptr());
-                if frames_read < floats.len()/2 {
-                    self.control_tx.blocking_send(VoiceSessionControlMessage::PlayNextInQueue).unwrap();
+            if !data_l.paused {
+                unsafe {
+                    let frames_read = openmpt_module_read_interleaved_float_stereo(module_wrapped.module.0, 48000, floats.len()/2, floats.as_mut_ptr());
+                    if frames_read < floats.len()/2 {
+                        self.control_tx.blocking_send(VoiceSessionControlMessage::PlayNextInQueue).unwrap();
+                    }
                 }
             }
         }
@@ -153,9 +145,6 @@ impl Read for VoiceSession {
         if let Ok(controlmsg) = self.control_rx.try_recv() {
             match controlmsg {
                 VoiceSessionControlMessage::PlayNextInQueue => { self.play_next_in_queue(); },
-                VoiceSessionControlMessage::Pause => todo!(),
-                VoiceSessionControlMessage::Resume => todo!(),
-                VoiceSessionControlMessage::Stop => todo!(),
             }
         }
 

@@ -143,7 +143,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     }
 
     let followup: CreateInteractionResponseFollowup;
-    if session_data_lock.module_queue.is_empty() && session_data_lock.current_module.is_none() {
+    if session_data_lock.current_module.is_none() {
         session_data_lock.current_module = Some(wrapped_module);
         followup = CreateInteractionResponseFollowup::new()
             .content(&("Now playing: **".to_string()+&loaded_module_title_escaped+"**"));
@@ -161,5 +161,4 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 pub fn register() -> CreateCommand {
     CreateCommand::new("play").description("Play a module")
         .add_option(CreateCommandOption::new(serenity::all::CommandOptionType::String, "url", "Tracker module file URL").required(true))
-        .add_option(CreateCommandOption::new(serenity::all::CommandOptionType::Boolean, "override", "Skip the currently playing song, if you have permissions"))
 }
