@@ -105,27 +105,26 @@ pub async fn end_vote(ctx: Context, session: &VoiceSessionHandle) {
     if let Some(vote) = session_lock.current_vote.clone() {
         drop(session_lock);
         let death_handle = vote.timer_death_handle.clone();
-        let mut yes_amount = vote.votes_cast.values()
+        let yes_amount = vote.votes_cast.values()
             .filter(|vote| **vote)
             .count();
-        if vote.votes_needed == 1 {
-            yes_amount = usize::MAX;
+        let mut vote_override = false;
+        if vote.votes_needed <= 1 {
+            vote_override = true;
         }
         let no_amount = vote.votes_cast.values()
             .filter(|vote| !**vote)
             .count();
 
-        dbg!(yes_amount, no_amount);
-
-        if vote.votes_cast.keys().len() <= vote.votes_needed/2 {
+        if vote.votes_cast.keys().len() <= vote.votes_needed/2 && !vote_override {
             vote.text_channel_id.send_message(&ctx, CreateMessage::new().content(
                 "# :x: VOTE FAILED\nNot enough users voted."
             )).await.unwrap();
-        } else if no_amount >= yes_amount {
+        } else if no_amount >= yes_amount && !vote_override {
             vote.text_channel_id.send_message(&ctx, CreateMessage::new().content(
                 "# :x: VOTE FAILED\nThe majority of users voted NO."
             )).await.unwrap();
-        } else if yes_amount > no_amount {
+        } else if yes_amount > no_amount || vote_override {
             vote.text_channel_id.send_message(&ctx, CreateMessage::new().content(
                 "# :white_check_mark: VOTE PASSED\n".to_string()+&vote.kind.action_end_vote()
             )).await.unwrap();

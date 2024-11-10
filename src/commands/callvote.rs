@@ -47,25 +47,32 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         .channel_id.unwrap();
     // Below we subtract by 1 because the bot also counts as a member.
     // the bot doesn't need to cast a vote.
-    let amount_users_in_vc = ctx.http.get_channel(voice_channel_id).await.unwrap()
-        .guild().unwrap()
-        .members(&ctx).unwrap()
-        .len()-1;
+    let members = ctx.cache.guild(interaction.guild_id.unwrap()).unwrap()
+        .channels.get(&voice_channel_id).unwrap()
+        .members(&ctx).unwrap();
+    let votes_needed = members
+        .iter().filter(|member|
+            !interaction.guild_id.unwrap()
+                .to_guild_cached(&ctx).unwrap()
+                .voice_states.get(&member.user.id).unwrap()
+                .self_deaf
+        )
+        .count().saturating_sub(1);
 
     let (death_tx, mut death_rx) = channel::<bool>(4);
     let mut vote = Vote {
         kind: vote_kind,
         votes_cast: HashMap::new(),
-        votes_needed: amount_users_in_vc,
+        votes_needed,
         timer_death_handle: death_tx.clone(),
         text_channel_id: interaction.channel_id,
     };
     // End vote right away if only one vote is required
-    if vote.votes_needed == 1 {
+    if vote.votes_needed <= 1 {
         session.data.write().await
             .current_vote = Some(vote);
         end_vote(ctx.clone(), &session).await;
-        respond_command(&ctx, interaction, "Only one user inside the voice channel; assuming vote passed.").await;
+        respond_command(&ctx, interaction, "Only one or no votes required; assuming vote passed.").await;
         return;
     }
 
