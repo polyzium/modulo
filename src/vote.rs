@@ -68,6 +68,17 @@ pub async fn handle_voting(ctx: Context, interaction: &ComponentInteraction) {
 
     let mut session_lock = session_data.write().await;
     if let Some(vote) = &mut session_lock.current_vote {
+        if vote.votes_cast.contains_key(&member.user.id) {
+            drop(session_lock);
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("You have already voted")
+                    .ephemeral(true)
+            );
+            interaction.create_response(&ctx, response).await.unwrap();
+            return;
+        }
+
         vote.votes_cast.insert(member.user.id, vote_choice);
         if vote.votes_cast.keys().len() == vote.votes_needed {
             drop(session_lock);
