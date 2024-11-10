@@ -1,9 +1,9 @@
 use std::ffi::{CStr, CString};
 
-use libopenmpt_sys::openmpt_module_get_metadata;
+use libopenmpt_sys::{openmpt_module_get_duration_seconds, openmpt_module_get_metadata, openmpt_module_get_position_seconds};
 use serenity::all::{CommandInteraction, Context, CreateCommand};
 
-use crate::{botdata::BotDataKey, misc::{escape_markdown, respond_command}};
+use crate::{botdata::BotDataKey, misc::{escape_markdown, format_duration, respond_command}};
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let data_lock = ctx.data.read().await;
@@ -34,13 +34,26 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         if session_data_lock.paused {
             paused = " (paused)".to_string();
         }
-        current_content = "Currently playing: **".to_string()+&title+"**" + &paused + "\n";
+
+        let position_sec = unsafe {openmpt_module_get_position_seconds(current_module.module.0)};
+        let position = std::time::Duration::from_secs_f64(position_sec);
+        let position_formatted = format_duration(position);
+
+        let duration_sec = unsafe {openmpt_module_get_duration_seconds(current_module.module.0)};
+        let duration = std::time::Duration::from_secs_f64(duration_sec);
+        let duration_formatted = format_duration(duration);
+
+        current_content = "Currently playing: **".to_string()+&title+"** " + &format!("({}/{})", position_formatted, duration_formatted) + &paused + "\n";
     }
 
     if queue.is_empty() {
         queue_content = "The queue is empty. Use /play to pick a song.".to_string();
     } else {
         for (i, queued_module) in queue.iter().enumerate() {
+            let duration_sec = unsafe {openmpt_module_get_duration_seconds(queued_module.module.0)};
+            let duration = std::time::Duration::from_secs_f64(duration_sec);
+            let duration_formatted = format_duration(duration);
+
             let mut title: String = unsafe {CStr::from_ptr(openmpt_module_get_metadata(queued_module.module.0, key.as_ptr()))}
                 .to_str().unwrap()
                 .to_string();
@@ -49,7 +62,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
                 title = "[No title]".to_string()
             }
 
-            queue_content.push_str(&((i+1).to_string()+": **"+&title+"**\n"));
+            queue_content.push_str(&((i+1).to_string()+": **"+&title+"** ("+&duration_formatted+")\n"));
         }
     }
     drop(session_data_lock);

@@ -1,4 +1,4 @@
-use std::{ffi::{c_char, CStr}, os::raw::c_void};
+use std::{ffi::{c_char, CStr}, os::raw::c_void, time::Duration};
 
 use serenity::all::{CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage};
 
@@ -48,4 +48,8 @@ pub fn escape_markdown(string: &str) -> String {
     };
 
     new_string
+}
+
+pub fn format_duration(duration: Duration) -> String {
+    format!("{}:{:0>2}", duration.as_secs()/60, duration.as_secs()%60)
 }

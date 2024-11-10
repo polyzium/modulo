@@ -1,26 +1,13 @@
 use std::ffi::{CStr, CString};
 
 use libopenmpt_sys::{
-    openmpt_module_get_metadata,
-    openmpt_module_get_num_channels,
-    openmpt_module_get_num_instruments,
-    openmpt_module_get_num_orders,
-    openmpt_module_get_num_patterns,
-    openmpt_module_get_num_samples,
-    openmpt_module_get_num_subsongs,
-
-    openmpt_module_get_current_order,
-    openmpt_module_get_current_pattern,
-    // openmpt_module_get_current_playing_channels,
-    openmpt_module_get_current_row,
-    openmpt_module_get_current_speed,
-    openmpt_module_get_current_tempo2,
+    openmpt_module_get_current_order, openmpt_module_get_current_pattern, openmpt_module_get_current_row, openmpt_module_get_current_speed, openmpt_module_get_current_tempo2, openmpt_module_get_duration_seconds, openmpt_module_get_metadata, openmpt_module_get_num_channels, openmpt_module_get_num_instruments, openmpt_module_get_num_orders, openmpt_module_get_num_patterns, openmpt_module_get_num_samples, openmpt_module_get_num_subsongs, openmpt_module_get_position_seconds
 };
 use serenity::all::{CommandInteraction, Context};
 use serenity::builder::CreateCommand;
 
 use crate::botdata::BotDataKey;
-use crate::misc::{followup_command, respond_command};
+use crate::misc::{followup_command, format_duration, respond_command};
 
 const METADATA_KEYS: [&str; 11] = [
     "type",
@@ -76,6 +63,14 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             "Subsongs: "+&num_subsongs.to_string();
 
         // Playback
+        let position_sec = unsafe {openmpt_module_get_position_seconds(current_module.module.0)};
+        let position = std::time::Duration::from_secs_f64(position_sec);
+        let position_formatted = format_duration(position);
+
+        let duration_sec = unsafe {openmpt_module_get_duration_seconds(current_module.module.0)};
+        let duration = std::time::Duration::from_secs_f64(duration_sec);
+        let duration_formatted = format_duration(duration);
+
         let order = unsafe {openmpt_module_get_current_order(current_module.module.0)};
         let pattern = unsafe {openmpt_module_get_current_pattern(current_module.module.0)};
         // let playing_channels = unsafe {openmpt_module_get_current_playing_channels(current_module.module.0)};
@@ -87,7 +82,8 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             "## Playback details\n"+
             &format!("Row {}, order {} (pattern {})", row, order, pattern)+"\n"+
             // "Playing_channels: "+&playing_channels.to_string()+"\n"+
-            &format!("Speed/tempo: {}/{}", speed, tempo);
+            &format!("Speed/tempo: {}/{}", speed, tempo)+"\n"+
+            &format!("Position/duration: {}/{}", position_formatted, duration_formatted);
 
         // Metadata
         let mut metadata = "## Metadata\n".to_string();

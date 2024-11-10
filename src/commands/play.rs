@@ -1,12 +1,12 @@
 use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut};
 
-use libopenmpt_sys::{openmpt_module_create_from_memory2, openmpt_module_get_metadata};
+use libopenmpt_sys::{openmpt_module_create_from_memory2, openmpt_module_get_duration_seconds, openmpt_module_get_metadata};
 use serenity::all::{ChannelId, ChannelType, CommandInteraction, Context, CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage, ResolvedValue};
 use serenity::builder::CreateCommand;
 
 use crate::botdata::BotDataKey;
-use crate::misc::{escape_markdown, followup_command, openmpt_logger, respond_command};
+use crate::misc::{escape_markdown, followup_command, format_duration, openmpt_logger, respond_command};
 use crate::session::{initiate_session, OpenMptModuleSafe, WrappedModule};
 
 pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
@@ -148,9 +148,12 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         followup = CreateInteractionResponseFollowup::new()
             .content(&("Now playing: **".to_string()+&loaded_module_title_escaped+"**"));
     } else {
+        let duration_sec = unsafe {openmpt_module_get_duration_seconds(wrapped_module.module.0)};
+        let duration = std::time::Duration::from_secs_f64(duration_sec);
+        let duration_formatted = format_duration(duration);
         session_data_lock.module_queue.push_back(wrapped_module);
         followup = CreateInteractionResponseFollowup::new()
-            .content("Added **".to_string() + &loaded_module_title_escaped + "** to the queue");
+            .content("Added **".to_string() + &loaded_module_title_escaped + "** (" + &duration_formatted + ") to the queue");
     }
     drop(session_data_lock);
 
