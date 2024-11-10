@@ -113,6 +113,10 @@ pub async fn handle_voting(ctx: Context, interaction: &ComponentInteraction) {
 
 pub async fn end_vote(ctx: Context, session: &VoiceSessionHandle) {
     let session_lock = session.data.read().await;
+    if session.control_tx.is_closed() {
+        log::warn!("Session has been closed before the vote could end, ignoring");
+        return;
+    }
     if let Some(vote) = session_lock.current_vote.clone() {
         drop(session_lock);
         let death_handle = vote.timer_death_handle.clone();

@@ -25,13 +25,17 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     let botdata = lock.get_mut::<BotDataKey>().unwrap();
     let guild_id = interaction.guild_id.unwrap();
 
-    let session = botdata.sessions.get(&guild_id).unwrap();
+    let session = botdata.sessions.get(&guild_id).cloned().unwrap();
     let session_lock = session.data.write().await;
+    botdata.sessions.remove(&guild_id);
+    drop(lock);
 
     let handle = session_lock.notification_handle.clone();
     handle.send(crate::session::VoiceSessionNotificationMessage::Leave).await.unwrap();
+    if let Some(vote) = &session_lock.current_vote {
+        vote.timer_death_handle.send(false).await.unwrap();
+    }
     drop(session_lock);
-    botdata.sessions.remove(&guild_id);
 
     respond_command(&ctx, interaction, "Left the voice channel").await;
 }
