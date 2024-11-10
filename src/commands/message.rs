@@ -21,6 +21,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 
     if let Some(current_module) = &session_lock.current_module {
         let mut song_message = "## Song message\n```".to_string();
+        song_message = song_message.replace("`", "\\`");
         let message_key = CString::new("message").unwrap();
         let msg: String = unsafe {CStr::from_ptr(openmpt_module_get_metadata(current_module.module.0, message_key.as_ptr()))}
             .to_str().unwrap()
