@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, io::{Read, Seek}, sync::Arc};
 
-use libopenmpt_sys::{openmpt_module, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo};
+use libopenmpt_sys::{openmpt_module, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
 use serenity::{all::{ChannelId, Context, CreateMessage, GuildId}, prelude::TypeMap};
 use songbird::input::RawAdapter;
 use symphonia::core::io::MediaSource;
@@ -37,9 +37,41 @@ pub enum VoiceSessionControlMessage {
     // TODO
 }
 
+pub enum Interpolation {
+    Default,
+    None,
+    Linear,
+    Cubic,
+    Sinc8
+}
+
+impl Interpolation {
+    pub fn to_openmpt_value(&self) -> i32 {
+        match self {
+            Interpolation::Default => 0,
+            Interpolation::None => 1,
+            Interpolation::Linear => 2,
+            Interpolation::Cubic => 4,
+            Interpolation::Sinc8 => 8,
+        }
+    }
+
+    pub fn from_openmpt_value(value: i32) -> Self {
+        match value {
+            0 => Interpolation::Default,
+            1 => Interpolation::None,
+            2 => Interpolation::Linear,
+            4 => Interpolation::Cubic,
+            8 => Interpolation::Sinc8,
+            _ => panic!("Value out of range")
+        }
+    }
+}
+
 pub struct VoiceSessionData {
     pub(crate) current_module: Option<WrappedModule>,
     pub paused: bool,
+    pub(crate) interpolation: Interpolation,
     // pub(crate) context: Context,
     // pub(crate) text_channel_id: ChannelId,
     pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
@@ -92,6 +124,7 @@ impl VoiceSession {
             data: Arc::new(RwLock::new(VoiceSessionData {
                 current_module: None,
                 paused: false,
+                interpolation: Interpolation::Default,
                 // context: ctx.clone(),
                 // text_channel_id,
                 notification_handle: tx,
@@ -113,6 +146,12 @@ impl VoiceSession {
         } else {
             let Some(queued_module) = data_l.module_queue.pop_front() else { unreachable!() };
             data_l.current_module = Some(queued_module);
+            let Some(current_module) = &data_l.current_module else { unreachable!() };
+            unsafe {openmpt_module_set_render_param(
+                current_module.module.0,
+                OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH as std::os::raw::c_int,
+                data_l.interpolation.to_openmpt_value())
+            };
             let Some(module) = &data_l.current_module else { unreachable!() };
 
             let key = std::ffi::CString::new("title").unwrap();
