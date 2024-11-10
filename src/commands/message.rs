@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 
 use libopenmpt_sys::openmpt_module_get_metadata;
-use serenity::all::{CommandInteraction, Context};
+use serenity::all::{CommandInteraction, Context, CreateInteractionResponse, CreateInteractionResponseMessage};
 use serenity::builder::CreateCommand;
 
 use crate::botdata::BotDataKey;
@@ -29,7 +29,25 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         song_message.push_str(&(msg.clone()+&"```"));
 
         drop(session_lock);
-        respond_command(&ctx, interaction, &song_message).await;
+
+        let response = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+            .content(song_message)
+        );
+        let result = interaction.create_response(&ctx.http, response).await;
+        if let Err(err) = result {
+            match err {
+                serenity::Error::Model(model_err) => {
+                    if matches!(model_err, serenity::all::ModelError::MessageTooLong(_)) {
+                        respond_command(&ctx, interaction, "We've reached Discord's character limit. Sorry.").await
+                    } else {
+                        respond_command(&ctx, interaction, &("Error: ".to_owned() + &model_err.to_string())).await
+                    }
+                },
+                _ => log::warn!("Unable to send response: {err}")
+            }
+        }
+
         return;
     } else {
         drop(session_lock);
