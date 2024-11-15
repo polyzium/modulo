@@ -52,6 +52,7 @@ pub async fn handle_voting(ctx: Context, interaction: &ComponentInteraction) {
         let response = CreateInteractionResponse::Message(
             CreateInteractionResponseMessage::new()
             .content("The bot must be in a voice channel")
+            .ephemeral(true)
         );
         interaction.create_response(&ctx.http, response).await.unwrap();
         return;
