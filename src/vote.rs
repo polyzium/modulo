@@ -35,6 +35,7 @@ impl ToString for VoteKind {
 
 #[derive(Clone)]
 pub struct Vote {
+    pub caller: UserId,
     pub text_channel_id: ChannelId,
     pub kind: VoteKind,
     pub votes_needed: usize,

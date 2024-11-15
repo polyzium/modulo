@@ -20,10 +20,16 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         return;
     }
 
+    let vote_kind_string = {
+        if let ResolvedValue::SubCommand(_) = interaction.data.options()[0].value {
+            interaction.data.options()[0].name
+        } else { unreachable!() }
+    };
+
     let session = session_u.unwrap().clone();
     let session_lock = session.data.read().await;
 
-    if session_lock.current_vote.is_some() {
+    if session_lock.current_vote.is_some() && vote_kind_string != "cancel" {
         drop(session_lock);
         respond_command(&ctx, interaction, "There is already a vote in progress").await;
         return;
@@ -32,11 +38,38 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     // to prevent audio glitches. We'll lock it later
     drop(session_lock);
 
-    let vote_kind_string = {
-        if let ResolvedValue::SubCommand(_) = interaction.data.options()[0].value {
-            interaction.data.options()[0].name
-        } else { unreachable!() }
-    };
+    if vote_kind_string == "cancel" {
+        let mut session_lock = session.data.write().await;
+        if session_lock.current_vote.is_none() {
+            drop(session_lock);
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("No vote in progress")
+                    .ephemeral(true)
+            );
+            interaction.create_response(&ctx, response).await.unwrap();
+            return;
+        }
+        let vote = session_lock.current_vote.as_ref()
+            .unwrap();
+        if vote.caller != interaction.member.clone().unwrap().user.id {
+            drop(session_lock);
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("You are not allowed to cancel the current vote")
+                    .ephemeral(true)
+            );
+            interaction.create_response(&ctx, response).await.unwrap();
+            return;
+        }
+        let votecaller_user = ctx.cache.user(vote.caller).unwrap().clone();
+        vote.timer_death_handle.send(false).await.unwrap();
+        session_lock.current_vote = None;
+        drop(session_lock);
+
+        respond_command(&ctx, interaction, &("# Vote cancelled by ".to_owned()+&votecaller_user.mention().to_string())).await;
+        return;
+    }
     let vote_kind = match vote_kind_string {
         "skip" => VoteKind::Skip,
         &_ => unreachable!()
@@ -61,6 +94,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 
     let (death_tx, mut death_rx) = channel::<bool>(4);
     let mut vote = Vote {
+        caller: interaction.member.clone().unwrap().user.id,
         kind: vote_kind,
         votes_cast: HashMap::new(),
         votes_needed,
@@ -135,4 +169,5 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 pub fn register() -> CreateCommand {
     CreateCommand::new("callvote").description("Call a vote")
         .add_option(CreateCommandOption::new(CommandOptionType::SubCommand, "skip", "Skip currently playing song"))
+        .add_option(CreateCommandOption::new(CommandOptionType::SubCommand, "cancel", "Cancel currently ongoing vote"))
 }
