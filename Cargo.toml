@@ -1,6 +1,6 @@
 [package]
 name = "modulo"
-version = "1.0.0-alpha2"
+version = "1.0.0-alpha3"
 edition = "2021"
 
 [dependencies]
