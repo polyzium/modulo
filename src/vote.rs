@@ -6,9 +6,10 @@ use tokio::sync::{mpsc::Sender, RwLock};
 
 use crate::{botdata::BotDataKey, session::{VoiceSession, VoiceSessionData, VoiceSessionHandle, VoiceSessionNotificationMessage}};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum VoteKind {
-    Skip
+    Skip,
+    RemoveSongFromQueue(usize, String)
 }
 
 pub enum VoteStatus {
@@ -20,16 +21,18 @@ pub enum VoteStatus {
 impl VoteKind {
     pub fn action_end_vote(&self) -> String {
         match self {
-            VoteKind::Skip => "Skipping current song",
-        }.to_owned()
+            VoteKind::Skip => "Skipping current song".to_owned(),
+            VoteKind::RemoveSongFromQueue(_, title) => format!("Removed {} from the queue", title),
+        }
     }
 }
 
 impl ToString for VoteKind {
     fn to_string(&self) -> String {
         match self {
-            VoteKind::Skip => "skip current song",
-        }.to_owned()
+            VoteKind::Skip => "skip current song".to_owned(),
+            VoteKind::RemoveSongFromQueue(_, title) => format!("remove {} from the queue", title),
+        }
     }
 }
 
@@ -150,6 +153,11 @@ pub async fn end_vote(ctx: Context, session: &VoiceSessionHandle) {
             match vote.kind {
                 VoteKind::Skip => {
                     session.control_tx.send(crate::session::VoiceSessionControlMessage::PlayNextInQueue).await.unwrap();
+                },
+                VoteKind::RemoveSongFromQueue(index, _) => {
+                    let mut session_lock = session.data.write().await;
+                    session_lock.module_queue.remove(index);
+                    drop(session_lock);
                 },
             }
         };

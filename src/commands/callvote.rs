@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::time::Duration;
 
+use libopenmpt_sys::{openmpt_module_get_duration_seconds, openmpt_module_get_metadata, openmpt_module_get_position_seconds};
 use serenity::all::{ButtonStyle, CommandInteraction, CommandOptionType, Context, CreateButton, CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, Mentionable, ResolvedValue};
 use serenity::builder::CreateCommand;
 use tokio::spawn;
@@ -20,6 +22,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         return;
     }
 
+    let ResolvedValue::SubCommand(ref vote_options) = interaction.data.options()[0].value else { unreachable!() };
     let vote_kind_string = {
         if let ResolvedValue::SubCommand(_) = interaction.data.options()[0].value {
             interaction.data.options()[0].name
@@ -70,8 +73,59 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         respond_command(&ctx, interaction, &("# Vote cancelled by ".to_owned()+&votecaller_user.mention().to_string())).await;
         return;
     }
+
+    match vote_kind_string {
+        "skip" | "delsong" => {
+            let session_lock = session.data.read().await;
+            if session_lock.current_module.is_none() {
+                drop(session_lock);
+                respond_command(&ctx, interaction, "No module is playing, can't call a vote of this kind").await;
+                return;
+            }
+            let current_module = session_lock.current_module.as_ref().unwrap();
+            let position = unsafe { openmpt_module_get_position_seconds(current_module.module.0) };
+            let duration = unsafe { openmpt_module_get_duration_seconds(current_module.module.0) };
+            if duration-position < 30.0 {
+                drop(session_lock);
+                respond_command(&ctx, interaction, "Less than 30 seconds of this module remaining, can't call a vote of this kind").await;
+                return;
+            }
+        },
+        &_ => {}
+    }
     let vote_kind = match vote_kind_string {
         "skip" => VoteKind::Skip,
+        "delsong" => {
+            let index_option = vote_options.iter()
+                .find(|option| option.name == "which")
+                .unwrap()
+                .value.clone();
+            let ResolvedValue::Integer(mut index) = index_option else { unreachable!() };
+            index -= 1;
+            if index.is_negative() {
+                respond_command(&ctx, interaction, "Value cannot be zero or negative").await;
+                return;
+            }
+
+            let session_lock = session.data.read().await;
+
+            if index as usize >= session_lock.module_queue.len() {
+                drop(session_lock);
+                respond_command(&ctx, interaction, "Out of range").await;
+                return;
+            }
+            let module_to_remove = &session_lock.module_queue[index as usize];
+
+            let title_key = CString::new("title").unwrap();
+            let mut title: String = unsafe {CStr::from_ptr(openmpt_module_get_metadata(module_to_remove.module.0, title_key.as_ptr()))}
+                .to_str().unwrap()
+                .to_string();
+            if title.is_empty() {
+                title = "[No title]".to_owned()
+            }
+
+            VoteKind::RemoveSongFromQueue(index as usize, title)
+        },
         &_ => unreachable!()
     };
     let bot_id = ctx.http.get_current_user().await.unwrap().id;
@@ -169,5 +223,11 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
 pub fn register() -> CreateCommand {
     CreateCommand::new("callvote").description("Call a vote")
         .add_option(CreateCommandOption::new(CommandOptionType::SubCommand, "skip", "Skip currently playing song"))
+        .add_option(
+            CreateCommandOption::new(CommandOptionType::SubCommand, "delsong", "Remove song from a queue")
+                .add_sub_option(CreateCommandOption::new(CommandOptionType::Integer, "which", "Number/index of a song in the queue to be removed")
+                    .required(true)
+                )
+        )
         .add_option(CreateCommandOption::new(CommandOptionType::SubCommand, "cancel", "Cancel currently ongoing vote"))
 }
