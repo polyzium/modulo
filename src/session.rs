@@ -1,6 +1,6 @@
-use std::{collections::VecDeque, io::{Read, Seek}, sync::Arc};
+use std::{collections::VecDeque, ffi::CString, io::{Read, Seek}, sync::Arc};
 
-use libopenmpt_sys::{openmpt_module, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
+use libopenmpt_sys::{openmpt_module, openmpt_module_ctl_set_boolean, openmpt_module_ctl_set_text, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
 use serenity::{all::{ChannelId, Context, CreateMessage, GuildId}, prelude::TypeMap};
 use songbird::input::RawAdapter;
 use symphonia::core::io::MediaSource;
@@ -72,6 +72,8 @@ pub struct VoiceSessionData {
     pub(crate) current_module: Option<WrappedModule>,
     pub paused: bool,
     pub(crate) interpolation: Interpolation,
+    pub(crate) amiga_enabled: bool,
+    pub(crate) amiga_mode: String,
     // pub(crate) context: Context,
     // pub(crate) text_channel_id: ChannelId,
     pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
@@ -125,6 +127,8 @@ impl VoiceSession {
                 current_module: None,
                 paused: false,
                 interpolation: Interpolation::Default,
+                amiga_enabled: false,
+                amiga_mode: "auto".to_owned(),
                 // context: ctx.clone(),
                 // text_channel_id,
                 notification_handle: tx,
@@ -147,10 +151,19 @@ impl VoiceSession {
             let Some(queued_module) = data_l.module_queue.pop_front() else { unreachable!() };
             data_l.current_module = Some(queued_module);
             let Some(current_module) = &data_l.current_module else { unreachable!() };
-            unsafe {openmpt_module_set_render_param(
-                current_module.module.0,
-                OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH as std::os::raw::c_int,
-                data_l.interpolation.to_openmpt_value())
+            unsafe {
+                openmpt_module_set_render_param(
+                    current_module.module.0,
+                    OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH as std::os::raw::c_int,
+                    data_l.interpolation.to_openmpt_value()
+                );
+
+                let ctl = CString::new("render.resampler.emulate_amiga").unwrap();
+                openmpt_module_ctl_set_boolean(current_module.module.0, ctl.as_ptr(), data_l.amiga_enabled as i32);
+
+                let ctl = CString::new("render.resampler.emulate_amiga_type").unwrap();
+                let value = CString::new(data_l.amiga_mode.clone()).unwrap();
+                openmpt_module_ctl_set_text(current_module.module.0, ctl.as_ptr(), value.as_ptr());
             };
             let Some(module) = &data_l.current_module else { unreachable!() };
 

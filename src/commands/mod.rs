@@ -10,6 +10,7 @@ mod pause;
 mod resume;
 mod stop;
 mod interpolation;
+mod amigaresampler;
 
 use std::sync::Arc;
 use serenity::{all::{Command, CommandInteraction, Context, GuildId, Http}, Error};
@@ -27,6 +28,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
     Command::create_global_command(http, resume::register()).await.unwrap();
     Command::create_global_command(http, stop::register()).await.unwrap();
     Command::create_global_command(http, interpolation::register()).await.unwrap();
+    Command::create_global_command(http, amigaresampler::register()).await.unwrap();
 
     /*
         To anybody who comes across this line:
@@ -48,7 +50,8 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
             pause::register(),
             resume::register(),
             stop::register(),
-            interpolation::register()
+            interpolation::register(),
+            amigaresampler::register(),
         ])
         .await
 }
@@ -67,6 +70,7 @@ pub async fn handle_commands(ctx: Context, interaction: &CommandInteraction) {
         "resume" => resume::handle(ctx, interaction).await,
         "stop" => stop::handle(ctx, interaction).await,
         "interpolation" => interpolation::handle(ctx, interaction).await,
+        "amigaresampler" => amigaresampler::handle(ctx, interaction).await,
         &_ => {},
     };
 }
