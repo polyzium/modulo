@@ -77,7 +77,7 @@ pub struct VoiceSessionData {
     pub(crate) amiga_mode: String,
     pub(crate) autosubsong_enabled: bool,
     // pub(crate) context: Context,
-    // pub(crate) text_channel_id: ChannelId,
+    pub(crate) text_channel_id: ChannelId,
     pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
     pub(crate) module_queue: VecDeque<WrappedModule>,
     pub current_vote: Option<crate::vote::Vote>
@@ -137,7 +137,7 @@ impl VoiceSession {
                 amiga_mode: "auto".to_owned(),
                 autosubsong_enabled: false,
                 // context: ctx.clone(),
-                // text_channel_id,
+                text_channel_id,
                 notification_handle: tx,
                 module_queue: VecDeque::with_capacity(16),
                 current_vote: None,
