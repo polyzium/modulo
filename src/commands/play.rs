@@ -100,7 +100,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     )});
     if module.0.is_null() {
         let followup = CreateInteractionResponseFollowup::new()
-        .content("Failed to initialize libopenmpt module");
+        .content("Failed to initialize libopenmpt module.\nPlease make sure that the provided URL is a direct download link. For ModArchive modules, right click on \"Download\" and select \"Copy Link\" (on Firefox) or \"Copy link address\" (on Chrome).");
         interaction.create_followup(&ctx, followup).await.unwrap();
 
         return;
