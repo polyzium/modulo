@@ -121,7 +121,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
                 .to_str().unwrap()
                 .to_string();
             if title.is_empty() {
-                title = "[No title]".to_owned()
+                title = module_to_remove.filename.clone()
             }
 
             VoteKind::RemoveSongFromQueue(index as usize, title)

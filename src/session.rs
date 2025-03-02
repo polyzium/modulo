@@ -21,7 +21,7 @@ impl Drop for OpenMptModuleSafe {
 }
 
 pub struct WrappedModule {
-    // pub filename: String,
+    pub filename: String,
     pub filehash: String,
     pub module: OpenMptModuleSafe
 }
@@ -112,9 +112,6 @@ impl VoiceSession {
                         VoiceSessionNotificationMessage::Leave => break,
                         VoiceSessionNotificationMessage::PlayingNextInQueue(title) => {
                             let mut escaped_title = escape_markdown(&title);
-                            if escaped_title.is_empty() {
-                                escaped_title = "[No title]".to_string();
-                            }
                             let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content("Now playing: **".to_string()+&escaped_title+"**"))
                                 .await;
                         },
@@ -176,8 +173,11 @@ impl VoiceSession {
 
             let key = std::ffi::CString::new("title").unwrap();
             let title_raw = unsafe {openmpt_module_get_metadata(module.module.0, key.as_ptr())};
-            let module_title = unsafe {std::ffi::CStr::from_ptr(title_raw)}
+            let mut module_title = unsafe {std::ffi::CStr::from_ptr(title_raw)}
                 .to_str().unwrap();
+            if module_title.is_empty() {
+                module_title = &module.filename;
+            }
 
             data_l.notification_handle.blocking_send(VoiceSessionNotificationMessage::PlayingNextInQueue(module_title.to_string())).unwrap();
         }

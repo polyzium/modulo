@@ -29,7 +29,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         title = escape_markdown(&title);
         let mut paused = String::new();
         if title.is_empty() {
-            title = "[No title]".to_string()
+            title = current_module.filename.clone();
         }
         if session_data_lock.paused {
             paused = " (paused)".to_string();
@@ -59,7 +59,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
                 .to_string();
             title = escape_markdown(&title);
             if title.is_empty() {
-                title = "[No title]".to_string()
+                title = queued_module.filename.clone();
             }
 
             queue_content.push_str(&((i+1).to_string()+": **"+&title+"** ("+&duration_formatted+")\n"));

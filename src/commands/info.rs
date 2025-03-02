@@ -42,7 +42,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
             .to_str().unwrap()
             .to_string();
         if title.is_empty() {
-            title = "[No title]".to_owned()
+            title = current_module.filename.clone()
         }
 
         // Details

@@ -106,9 +106,26 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
         return;
     }
 
+    let r_url = reqwest::Url::parse(url).unwrap();
+    let mut filename = String::new();
+
+    // Detect ModArchive URL
+    if r_url.host_str().unwrap() == "api.modarchive.org" {
+        if let Some(fragment) = r_url.fragment() {
+            // ModArchive URLs have their filename in the anchor/fragment area
+            filename = fragment.to_string();
+        }
+    } else if let Some(segments) = r_url.path_segments() {
+        if filename.is_empty() {
+            // Take the last path segment and treat it as filename
+            filename = segments.last().unwrap().to_string();
+        }
+    }
+
     let wrapped_module = WrappedModule {
         filehash: module_file_hash,
         module,
+        filename,
     };
 
     let mut session_data_lock = session.data.write().await;
@@ -139,7 +156,7 @@ pub async fn handle(ctx: Context, interaction: &CommandInteraction) {
     // Escape symbols that might conflict with Discord's Markdown syntax
     let mut loaded_module_title_escaped = escape_markdown(loaded_module_title);
     if loaded_module_title_escaped.is_empty() {
-        loaded_module_title_escaped = "[No title]".to_string()
+        loaded_module_title_escaped = wrapped_module.filename.clone()
     }
 
     let followup: CreateInteractionResponseFollowup;
