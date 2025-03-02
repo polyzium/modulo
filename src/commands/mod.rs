@@ -32,6 +32,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
     Command::create_global_command(http, interpolation::register()).await.unwrap();
     Command::create_global_command(http, amigaresampler::register()).await.unwrap();
     Command::create_global_command(http, readme::register()).await.unwrap();
+    Command::create_global_command(http, autosubsong::register()).await.unwrap();
 
     /*
         To anybody who comes across this line:
@@ -56,6 +57,7 @@ pub async fn register_commands(http: &Arc<Http>) -> Result<Vec<Command>, Error> 
             interpolation::register(),
             amigaresampler::register(),
             readme::register(),
+            autosubsong::register(),
         ])
         .await
 }
@@ -76,6 +78,7 @@ pub async fn handle_commands(ctx: Context, interaction: &CommandInteraction) {
         "interpolation" => interpolation::handle(ctx, interaction).await,
         "amigaresampler" => amigaresampler::handle(ctx, interaction).await,
         "readme" => readme::handle(ctx, interaction).await,
+        "autosubsong" => autosubsong::handle(ctx, interaction).await,
         &_ => {},
     };
 }

@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, ffi::CString, io::{Read, Seek}, sync::Arc};
 
-use libopenmpt_sys::{openmpt_module, openmpt_module_ctl_set_boolean, openmpt_module_ctl_set_text, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_read_interleaved_float_stereo, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
+use libopenmpt_sys::{openmpt_module, openmpt_module_ctl_set_boolean, openmpt_module_ctl_set_text, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_get_num_subsongs, openmpt_module_get_selected_subsong, openmpt_module_read_interleaved_float_stereo, openmpt_module_select_subsong, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
 use serenity::{all::{ChannelId, Context, CreateMessage, GuildId}, prelude::TypeMap};
 use songbird::input::RawAdapter;
 use symphonia::core::io::MediaSource;
@@ -29,6 +29,7 @@ pub struct WrappedModule {
 pub enum VoiceSessionNotificationMessage {
     EndOfQueue,
     PlayingNextInQueue(String),
+    PlayingSubsong(i32),
     Leave,
 }
 
@@ -74,6 +75,7 @@ pub struct VoiceSessionData {
     pub(crate) interpolation: Interpolation,
     pub(crate) amiga_enabled: bool,
     pub(crate) amiga_mode: String,
+    pub(crate) autosubsong_enabled: bool,
     // pub(crate) context: Context,
     // pub(crate) text_channel_id: ChannelId,
     pub(crate) notification_handle: Sender<VoiceSessionNotificationMessage>,
@@ -116,6 +118,10 @@ impl VoiceSession {
                             let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content("Now playing: **".to_string()+&escaped_title+"**"))
                                 .await;
                         },
+                        VoiceSessionNotificationMessage::PlayingSubsong(subsong_number) => {
+                            let _ = text_channel_id2.send_message(&ctx2, CreateMessage::new().content(format!("Playing subsong {subsong_number}")))
+                                .await;
+                        }
                     };
                 }
             }
@@ -129,6 +135,7 @@ impl VoiceSession {
                 interpolation: Interpolation::Default,
                 amiga_enabled: false,
                 amiga_mode: "auto".to_owned(),
+                autosubsong_enabled: false,
                 // context: ctx.clone(),
                 // text_channel_id,
                 notification_handle: tx,
@@ -187,7 +194,17 @@ impl Read for VoiceSession {
                 unsafe {
                     let frames_read = openmpt_module_read_interleaved_float_stereo(module_wrapped.module.0, 48000, floats.len()/2, floats.as_mut_ptr());
                     if frames_read < floats.len()/2 {
-                        self.control_tx.blocking_send(VoiceSessionControlMessage::PlayNextInQueue).unwrap();
+                        if !data_l.autosubsong_enabled {
+                            self.control_tx.blocking_send(VoiceSessionControlMessage::PlayNextInQueue).unwrap();
+                        } else {
+                            let current_subsong = openmpt_module_get_selected_subsong(module_wrapped.module.0);
+                            if current_subsong == openmpt_module_get_num_subsongs(module_wrapped.module.0) - 1 {
+                                self.control_tx.blocking_send(VoiceSessionControlMessage::PlayNextInQueue).unwrap();
+                            } else {
+                                openmpt_module_select_subsong(module_wrapped.module.0, current_subsong+1);
+                                data_l.notification_handle.blocking_send(VoiceSessionNotificationMessage::PlayingSubsong(current_subsong + 1)).unwrap();
+                            }
+                        }
                     }
                 }
             }
