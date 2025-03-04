@@ -70,12 +70,22 @@ pub async fn leave_vc(ctx: &Context, guild_id: GuildId) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+pub async fn remove_session(ctx: &Context, guild_id: GuildId) -> bool {
     let mut lock = ctx.data.write().await;
     let botdata = lock.get_mut::<BotDataKey>().unwrap();
 
-    let session = botdata.sessions.get(&guild_id).cloned().unwrap();
+    let session_u = botdata.sessions.get(&guild_id).cloned();
+    if session_u.is_none() {
+        return false;
+    }
+    let session = session_u.unwrap();
     let session_lock = session.data.write().await;
-    botdata.sessions.remove(&guild_id);
+    session.call.lock().await
+        .stop();
+    let was_present = botdata.sessions.remove(&guild_id).is_some();
     drop(lock);
 
     let handle = session_lock.notification_handle.clone();
@@ -85,5 +95,5 @@ pub async fn leave_vc(ctx: &Context, guild_id: GuildId) -> Result<()> {
     }
     drop(session_lock);
 
-    Ok(())
+    was_present
 }

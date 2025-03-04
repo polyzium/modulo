@@ -37,46 +37,70 @@ impl EventHandler for Handler {
     }
 
     async fn voice_state_update(&self, ctx: Context, _old: Option<VoiceState>, new: VoiceState) {
-        if new.guild_id.is_none() { return };
-        let guild_id = new.guild_id.unwrap();
+        // Do we have a member?
+        if let Some(ref member) = new.member {
+            // If bot disconnected
+            if ctx.cache.current_user().id == member.user.id && new.channel_id.is_none() {
+                on_disconnect(&ctx, &_old, &new).await;
+            }
+        }
+        if new.guild_id.is_some() {
+            disconnect_if_nobody(&ctx, &_old, &new).await;
+        }
+    }
+}
 
-        let voice_channel_id: ChannelId;
-        let call_u = songbird::get(&ctx)
-            .await
-            .expect("Songbird Voice client placed in at initialisation.")
-            .get(guild_id);
-        if let Some(call) = call_u {
-            voice_channel_id = ChannelId::from(
-                call.lock().await
-                .current_channel().unwrap()
-                .0
-            );
-        } else { return; }
+async fn disconnect_if_nobody(ctx: &Context, _old: &Option<VoiceState>, new: &VoiceState) {
+    let guild_id = new.guild_id.unwrap();
 
-        // Get VC members and subtract by one because the bot shouldn't count as a member
-        let members_count = ctx.cache.guild(guild_id).unwrap()
-            .channels.get(&voice_channel_id).unwrap()
-            .members(&ctx).unwrap()
-            .len()
-            .saturating_sub(1);
-
-        if members_count != 0 { return; }
-
-        let data_lock = ctx.data.read().await;
-        let session_u = data_lock.get::<BotDataKey>().unwrap()
-            .sessions.get(&guild_id);
-        if session_u.is_none() {
+    let voice_channel_id: ChannelId;
+    let call_u = songbird::get(&ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .get(guild_id);
+    if let Some(call) = call_u {
+        if call.lock().await
+        .current_channel().is_none() {
             return;
         }
 
-        let session = session_u.unwrap().clone();
-        let session_lock = session.data.read().await;
+        voice_channel_id = ChannelId::from(
+            call.lock().await
+            .current_channel().unwrap()
+            .0
+        );
+    } else { return; }
 
-        let text_channel_id = session_lock.text_channel_id;
-        drop(session_lock);
-        drop(data_lock);
+    // Get VC members and subtract by one because the bot shouldn't count as a member
+    let members_count = ctx.cache.guild(guild_id).unwrap()
+        .channels.get(&voice_channel_id).unwrap()
+        .members(&ctx).unwrap()
+        .len()
+        .saturating_sub(1);
 
-        crate::misc::leave_vc(&ctx, guild_id).await.unwrap();
-        text_channel_id.send_message(ctx.http, CreateMessage::new().content("No users in the voice channel, leaving")).await.unwrap();
+    if members_count != 0 { return; }
+
+    let data_lock = ctx.data.read().await;
+    let session_u = data_lock.get::<BotDataKey>().unwrap()
+        .sessions.get(&guild_id);
+    if session_u.is_none() {
+        return;
     }
+
+    let session = session_u.unwrap().clone();
+    let session_lock = session.data.read().await;
+
+    let text_channel_id = session_lock.text_channel_id;
+    drop(session_lock);
+    drop(data_lock);
+
+    crate::misc::leave_vc(&ctx, guild_id).await.unwrap();
+    text_channel_id.send_message(&ctx.http, CreateMessage::new().content("No users in the voice channel, leaving")).await.unwrap();
+}
+
+async fn on_disconnect(ctx: &Context, _old: &Option<VoiceState>, new: &VoiceState) {
+    if new.guild_id.is_none() { return };
+    let guild_id = new.guild_id.unwrap();
+
+    crate::misc::remove_session(&ctx, guild_id).await;
 }

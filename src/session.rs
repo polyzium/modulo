@@ -2,9 +2,9 @@ use std::{collections::VecDeque, ffi::CString, io::{Read, Seek}, sync::Arc};
 
 use libopenmpt_sys::{openmpt_module, openmpt_module_ctl_set_boolean, openmpt_module_ctl_set_text, openmpt_module_destroy, openmpt_module_get_metadata, openmpt_module_get_num_subsongs, openmpt_module_get_selected_subsong, openmpt_module_read_interleaved_float_stereo, openmpt_module_select_subsong, openmpt_module_set_render_param, OPENMPT_MODULE_RENDER_INTERPOLATIONFILTER_LENGTH};
 use serenity::{all::{ChannelId, Context, CreateMessage, GuildId}, prelude::TypeMap};
-use songbird::input::RawAdapter;
+use songbird::{input::RawAdapter, Call};
 use symphonia::core::io::MediaSource;
-use tokio::{spawn, sync::{mpsc::{channel, Receiver, Sender}, RwLock}};
+use tokio::{spawn, sync::{mpsc::{channel, Receiver, Sender}, Mutex, RwLock}};
 use anyhow::Result;
 
 use crate::{botdata::BotDataKey, misc::escape_markdown};
@@ -86,7 +86,8 @@ pub struct VoiceSessionData {
 #[derive(Clone)]
 pub struct VoiceSessionHandle {
     pub data: Arc<RwLock<VoiceSessionData>>,
-    pub control_tx: Sender<VoiceSessionControlMessage>
+    pub control_tx: Sender<VoiceSessionControlMessage>,
+    pub call: Arc<Mutex<Call>>,
 }
 
 pub struct VoiceSession {
@@ -264,6 +265,7 @@ pub async fn initiate_session(ctx: &Context, guild_id: GuildId, voice_channel_id
             let handle = VoiceSessionHandle {
                 data: session.data.clone(),
                 control_tx: control,
+                call: handler_lock.clone(),
             };
             let handle2 = handle.clone();
             botdata.sessions.insert(guild_id, handle);
