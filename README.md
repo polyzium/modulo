@@ -1,5 +1,6 @@
 # Modulo
-A tracker music bot for Discord, powered by libopenmpt.
+A tracker music bot for Discord, powered by libopenmpt.  
+Try it out by [adding it to your server](https://discord.com/oauth2/authorize?client_id=1302223346100076574).
 
 ## Prerequisites
 - rustc 1.74.1 or later
