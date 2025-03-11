@@ -39,7 +39,9 @@ impl Default for BotData {
     fn default() -> Self {
         Self {
             sessions: HashMap::new(),
-            downloader_client: reqwest::Client::new()
+            downloader_client: reqwest::Client::builder()
+            .user_agent(format!("ModuloDiscordBot/{} ({} {}) reqwest/0.12.9", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH))
+            .build().unwrap()
         }
     }
 }
